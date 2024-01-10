@@ -10,4 +10,4 @@ Building an end-to-end data engineering pipeline. It covers each stage from data
 
 🚀 Data storage solutions with Cassandra and PostgreSQL
 
-🚀 Containerizing your entire data engineering setup with Docker
+🚀 Containerizing all services with Docker
