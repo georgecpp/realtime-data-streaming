@@ -1,10 +1,10 @@
 import logging
-from datetime import datetime
 
-from cassandra.auth import PlainTextAuthProvider
 from cassandra.cluster import Cluster
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import from_json, col
+from pyspark.sql.types import StructType, StructField, StringType
+
 
 def create_keyspace(session):
     session.execute("""
@@ -26,6 +26,7 @@ def create_table(session):
         post_code TEXT,
         email TEXT,
         username TEXT,
+        dob TEXT,
         registered_date TEXT,
         phone TEXT,
         picture TEXT);
@@ -62,21 +63,23 @@ def insert_data(session, **kwargs):
     except Exception as e:
         logging.error(f'could not insert data due to {e}')
 
+
 def create_spark_connection():
     s_conn = None
+
     try:
         s_conn = SparkSession.builder \
-        .appName('SparkDataStreaming') \
-        .config('spark.jars.packages', "com.datastax.spark:spark-cassandra-connector_2.13:3.41,"
-                                        "org.apache.spark:spark-sql-kafka-0-10_2.13:3.4.1") \
-        .config('spark.cassandra.connection.host', 'localhost') \
-        .getOrCreate()
+            .appName('SparkDataStreaming') \
+            .config('spark.jars.packages', "com.datastax.spark:spark-cassandra-connector_2.12:3.4.1,"
+                                           "org.apache.spark:spark-sql-kafka-0-10_2.12:3.4.1") \
+            .config('spark.cassandra.connection.host', 'localhost') \
+            .getOrCreate()
 
         s_conn.sparkContext.setLogLevel("ERROR")
         logging.info("Spark connection created successfully!")
     except Exception as e:
         logging.error(f"Couldn't create the spark session due to exception {e}")
-    
+
     return s_conn
 
 
@@ -89,22 +92,26 @@ def connect_to_kafka(spark_conn):
             .option('subscribe', 'users_created') \
             .option('startingOffsets', 'earliest') \
             .load()
-        logging.info('kafka dataframe created successfully')
+        logging.info("kafka dataframe created successfully")
     except Exception as e:
         logging.warning(f"kafka dataframe could not be created because: {e}")
-    
+
     return spark_df
+
 
 def create_cassandra_connection():
     try:
-        #connection to the cassandra cluster
+        # connecting to the cassandra cluster
         cluster = Cluster(['localhost'])
+
         cas_session = cluster.connect()
-        return cas_session   
+
+        return cas_session
     except Exception as e:
-        logging.error(f"Could not create cassandra session due to {e}")
+        logging.error(f"Could not create cassandra connection due to {e}")
         return None
-    
+
+
 def create_selection_df_from_kafka(spark_df):
     schema = StructType([
         StructField("id", StringType(), False),
@@ -125,18 +132,21 @@ def create_selection_df_from_kafka(spark_df):
     print(sel)
 
     return sel
+
+
 if __name__ == "__main__":
     # create spark connection
     spark_conn = create_spark_connection()
+
     if spark_conn is not None:
         # connect to kafka with spark connection
-        spark_df = connect_to_kafka(spark_conn=spark_conn)
+        spark_df = connect_to_kafka(spark_conn)
         selection_df = create_selection_df_from_kafka(spark_df)
         session = create_cassandra_connection()
-        if session is not None:
-            create_keyspace(session=session)
-            create_table(session=session)
 
+        if session is not None:
+            create_keyspace(session)
+            create_table(session)
             streaming_query = (selection_df.writeStream.format("org.apache.spark.sql.cassandra")
                                .option('checkpointLocation', '/tmp/checkpoint')
                                .option('keyspace', 'spark_streams')

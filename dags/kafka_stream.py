@@ -1,10 +1,11 @@
+import uuid
 from datetime import datetime
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 
 default_args = {
     'owner': 'georgecpp',
-    'start_date': datetime(2024,1,9,10,00)
+    'start_date': datetime(2024, 1, 10, 10, 00)
 }
 
 def get_data():
@@ -13,13 +14,15 @@ def get_data():
     res = requests.get("https://randomuser.me/api/")
     res = res.json()
     res = res['results'][0]
-    return res  
+
+    return res
 
 def format_data(res):
     data = {}
     location = res['location']
+    data['id'] = uuid.uuid4()
     data['first_name'] = res['name']['first']
-    data['last_name'] =  res['name']['last']
+    data['last_name'] = res['name']['last']
     data['gender'] = res['gender']
     data['address'] = f"{str(location['street']['number'])} {location['street']['name']}, " \
                       f"{location['city']}, {location['state']}, {location['country']}"
@@ -31,7 +34,7 @@ def format_data(res):
     data['phone'] = res['phone']
     data['picture'] = res['picture']['medium']
 
-    return data    
+    return data
 
 def stream_data():
     import json
